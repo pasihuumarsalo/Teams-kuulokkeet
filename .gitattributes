@@ -1,0 +1,15 @@
+# Windows-tiedostot pidetään aina CRLF-rivinvaihdoilla, myös Linux/macOS-checkoutissa
+# (Windows PowerShell 5.1 ja cmd.exe tarvitsevat CRLF:n). UTF-8 BOM säilyy sellaisenaan.
+*         text=auto
+*.ps1     text eol=crlf
+*.psm1    text eol=crlf
+*.cmd     text eol=crlf
+*.bat     text eol=crlf
+README.txt text eol=crlf
+
+# Muut
+*.md      text eol=lf
+*.yml     text eol=lf
+*.png     binary
+*.ico     binary
+*.zip     binary

@@ -1,0 +1,49 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+jobs:
+  check:
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+
+  release:
+    name: Rakenna ZIP ja julkaise
+    needs: check
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Tarkista, että tagi vastaa skriptin versiota
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          if ! grep -q "\$script:Version *= *'$VERSION'" TeamsKuulokkeet.ps1; then
+            echo "::error::Tagi $GITHUB_REF_NAME ei vastaa skriptin \$script:Version-arvoa"
+            exit 1
+          fi
+
+      - name: Rakenna TeamsKuulokkeet.zip (tiedostot juuressa)
+        run: |
+          mkdir -p dist
+          zip -X dist/TeamsKuulokkeet.zip Asenna.cmd Poista.cmd README.txt TeamsKuulokkeet.ps1
+          unzip -l dist/TeamsKuulokkeet.zip
+
+      - name: Julkaisutiedote muutoslokista
+        run: |
+          awk -v v="$VERSION" '/^## /{p=($2==v)} p' CHANGELOG.md > notes.md
+          if [ ! -s notes.md ]; then echo "Teams-kuulokkeet $VERSION" > notes.md; fi
+          cat notes.md
+
+      - name: Luo GitHub-julkaisu
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/TeamsKuulokkeet.zip \
+            --title "Teams-kuulokkeet $VERSION" \
+            --notes-file notes.md

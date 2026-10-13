@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Tarkista skripti (Windows PowerShell 5.1)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Koodaus ja rivinvaihdot
+        shell: powershell
+        run: |
+          $bytes = [IO.File]::ReadAllBytes("TeamsKuulokkeet.ps1")
+          if ($bytes[0] -ne 0xEF -or $bytes[1] -ne 0xBB -or $bytes[2] -ne 0xBF) {
+            throw "TeamsKuulokkeet.ps1: UTF-8 BOM puuttuu"
+          }
+          foreach ($f in 'TeamsKuulokkeet.ps1', 'Asenna.cmd', 'Poista.cmd', 'README.txt') {
+            $text = [IO.File]::ReadAllText((Resolve-Path $f))
+            if ($text -match "(?<!`r)`n") { throw "${f}: sisältää LF-rivinvaihtoja (pitää olla CRLF)" }
+          }
+          foreach ($f in 'Asenna.cmd', 'Poista.cmd') {
+            if ([IO.File]::ReadAllBytes((Resolve-Path $f)) | Where-Object { $_ -gt 127 }) { throw "${f}: vain ASCII-merkit sallittu" }
+          }
+          Write-Host "Koodaus ja rivinvaihdot OK"
+
+      - name: Jäsennys ja C#-käännös
+        shell: powershell
+        run: |
+          $tokens = $null; $errors = $null
+          $path = (Resolve-Path "TeamsKuulokkeet.ps1").Path
+          $ast = [System.Management.Automation.Language.Parser]::ParseFile($path, [ref]$tokens, [ref]$errors)
+          if ($errors.Count -gt 0) {
+            $errors | ForEach-Object { Write-Host "Rivi $($_.Extent.StartLineNumber): $($_.Message)" }
+            throw "Jäsennysvirheitä: $($errors.Count)"
+          }
+          $assign = $ast.FindAll({ param($n)
+              $n -is [System.Management.Automation.Language.AssignmentStatementAst] -and $n.Left.Extent.Text -eq '$script:CSharp'
+            }, $true) | Select-Object -First 1
+          if (-not $assign) { throw '$script:CSharp-määrittelyä ei löytynyt' }
+          Add-Type -TypeDefinition $assign.Right.Expression.Value -Language CSharp
+          $name = [TeamsKuulokkeetAudio.Audio]::CleanDeviceName('Kuulokkeet (AirPods Pro Hands-Free)')
+          if ($name -ne 'AirPods Pro') { throw "CleanDeviceName palautti '$name'" }
+          Write-Host "PowerShell $($PSVersionTable.PSVersion): jäsennys ja käännös OK"

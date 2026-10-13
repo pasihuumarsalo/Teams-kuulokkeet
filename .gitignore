@@ -1,0 +1,9 @@
+# Julkaisupaketit rakennetaan GitHub Actionsissa, ei commitoida
+dist/
+*.zip
+
+# Windows / editorit
+Thumbs.db
+desktop.ini
+.vscode/
+*.lnk
